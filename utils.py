@@ -11,6 +11,14 @@ ONE_GB = ONE_MB * 1024
 ONE_TB = ONE_GB * 1024
 ONE_PB = ONE_TB * 1024
 
+def checksize(user_index, data):
+    total=data[user_index]['total'] 
+    if(total > ONE_GB*999):
+        return True
+    else:
+        return False
+
+
 # read data from json file
 def read_json():
     with open(json_file) as f:
@@ -36,30 +44,70 @@ def get_account_name(user_index, data):
 
 # checking the amount of traffic uploaded
 def check_up(user_index, data):
-    return sizeFormat(data[user_index]['up'])
+    total = data[user_index]['total'] * 0.05
+    rem = data[user_index]['total'] - (data[user_index]['down'] + data[user_index]['up'])
+
+    if rem < total or checksize(user_index, data) :
+        return "â›”ï¸ڈ"
+    else:
+        return  sizeFormat((data[user_index]['up']*0.05)+data[user_index]['up'])
 
 # checking the amount of downloaded
 def check_down(user_index, data):
-    return sizeFormat(data[user_index]['down'])
+    total = data[user_index]['total'] * 0.05
+    rem = data[user_index]['total'] - (data[user_index]['down'] + data[user_index]['up'])
+
+    if rem < total or checksize(user_index, data):
+        return "â›”ï¸ڈ"
+    else:
+        return sizeFormat((data[user_index]['down']*0.05)+data[user_index]['down'])
 
 def check_used(user_index, data):
-    return sizeFormat(data[user_index]['down'] + data[user_index]['up'])
+    total = data[user_index]['total'] * 0.05
+    rem = data[user_index]['total'] - (data[user_index]['down'] + data[user_index]['up'])
+    total2 = data[user_index]['total']
+    if rem < total:
+        return sizeFormat(total2+(total*0.02))
+    elif checksize(user_index, data) :
+        total2 = total2 / 100
+        return sizeFormat(total2+(total2*0.02))
+    else:
+        return sizeFormat(((data[user_index]['down'] + data[user_index]['up'])*0.05)+data[user_index]['down'] + data[user_index]['up'])
+
 
 def status(user_index, data):
-    return "✅ فعال" if data[user_index]['enable'] else "⛔️غیرفعال"
+    total = data[user_index]['total'] * 0.05
+    rem = data[user_index]['total'] - (data[user_index]['down'] + data[user_index]['up'])
+    if rem < total or checksize(user_index, data):
+        return "â›”ï¸ڈط؛غŒط±ظپط¹ط§ظ„"
+    elif data[user_index]['enable']:
+        return "âœ… ظپط¹ط§ظ„"
+    else:
+        return "â›”ï¸ڈط؛غŒط±ظپط¹ط§ظ„"
 
 # checking the total amount of traffic
 def check_total(user_index, data):
     total = data[user_index]['total']
     if total == 0:
-        return '♾'
-    return sizeFormat(total)
+        return 'â™¾'
+    elif checksize(user_index, data):
+        total = total/100
+        return sizeFormat(total)
+    else :  
+        return sizeFormat(total)
 
 def traffic_remaining(user_index, data):
-    if data[user_index]['total'] != 0:
-        return sizeFormat(data[user_index]['total'] - (data[user_index]['down'] + data[user_index]['up']))
-    
-    return '♾'
+    total = data[user_index]['total'] * 0.05
+    rem = data[user_index]['total'] - (data[user_index]['down'] + data[user_index]['up'])
+
+    if rem < total or checksize(user_index, data):
+        return "â›”ï¸ڈ 0.0 GB"
+    elif data[user_index]['total'] != 0:
+        trr = ((data[user_index]['total']) - (((data[user_index]['down'] + data[user_index]['up'])*0.05)+(data[user_index]['down'] + data[user_index]['up'])))
+        return sizeFormat(trr)
+    else:
+        return 'â™¾'
+
 
 def extract_time(time_rem):
     try:
@@ -70,7 +118,7 @@ def extract_time(time_rem):
             result = list(re.findall(
                 r"^(?!-)(\d*) day.?, (\d{1,2}):(\d{1,2}):", time_rem)[0])
     except IndexError:
-        return 'اتمام سرویس'
+        return 'ط§طھظ…ط§ظ… ط³ط±ظˆغŒط³'
 
     if len(result) == 3:
         day, hour, minute = result
@@ -78,14 +126,14 @@ def extract_time(time_rem):
         hour, minute = result
         day = ''
     if day != '':
-        day = day + ' روز و '
+        day = day + ' ط±ظˆط² ظˆ '
 
     if hour != '0':
-        hour = hour + ' ساعت و '
+        hour = hour + ' ط³ط§ط¹طھ ظˆ '
     elif hour == '0':
         hour = ''
 
-    minute = minute + ' دقیقه'
+    minute = minute + ' ط¯ظ‚غŒظ‚ظ‡'
     rem_time = day + hour + minute
     return rem_time
 
@@ -93,7 +141,7 @@ def extract_time(time_rem):
 def check_expiryTime(user_index, data):
     time_stamp = data[user_index]['expiryTime']
     if time_stamp == 0:
-        return ['♾', 'زمان ♾']
+        return ['â™¾', 'ط²ظ…ط§ظ† â™¾']
 
     s = time_stamp / 1000.0
 
