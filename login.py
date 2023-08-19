@@ -1,208 +1,205 @@
 import re
+import requests
 import json
-import base64
+import pickle
 from keys import *
-from datetime import datetime
-from persiantools.jdatetime import JalaliDateTime
 
-ONE_KB = 1024
-ONE_MB = ONE_KB * 1024
-ONE_GB = ONE_MB * 1024
-ONE_TB = ONE_GB * 1024
-ONE_PB = ONE_TB * 1024
+url_login = "login"
+url_lists = "xui/inbound/list"
+url_sanaei = "panel/inbound/list"
 
-def checksize(user_index, data):
-    total=data[user_index]['total'] 
-    if(total > ONE_GB*999):
-        return True
-    else:
-        return False
+# write data in json file
+def write_json(json_data):
+    with open(json_file, 'a') as f:
+        json.dump(json_data, f)
 
+# save login session in pickle file
+def write_pickle(pickle_data):
+    with open(pickle_file, 'wb') as f:
+        pickle.dump(pickle_data, f)
 
-# read data from json file
-def read_json():
-    with open(json_file) as f:
-        return json.load(f)
+def file_exists(file_path):
+    return os.path.exists(file_path)
 
-# checking the amount of traffic
-def sizeFormat(size):
-    if (size < ONE_KB):
-        return "{:.0f}".format(size) + " B"
-    elif (size < ONE_MB):
-        return "{:.2f}".format(size / ONE_KB) + " KB"
-    elif (size < ONE_GB):
-        return "{:.2f}".format(size / ONE_MB) + " MB"
-    elif (size < ONE_TB):
-        return "{:.2f}".format(size / ONE_GB) + " GB"
-    elif (size < ONE_PB):
-        return "{:.2f}".format(size / ONE_TB) + " TB"
-    else:
-        return "{:.2f}".format(size / ONE_PB) + " PB"
-
-def get_account_name(user_index, data):
-    return data[user_index]['email']
-
-# checking the amount of traffic uploaded
-def check_up(user_index, data):
-    total = data[user_index]['total'] * 0.05
-    rem = data[user_index]['total'] - (data[user_index]['down'] + data[user_index]['up'])
-
-    if rem < total or checksize(user_index, data) :
-        return "â›”ï¸ڈ"
-    else:
-        return  sizeFormat((data[user_index]['up']*0.05)+data[user_index]['up'])
-
-# checking the amount of downloaded
-def check_down(user_index, data):
-    total = data[user_index]['total'] * 0.05
-    rem = data[user_index]['total'] - (data[user_index]['down'] + data[user_index]['up'])
-
-    if rem < total or checksize(user_index, data):
-        return "â›”ï¸ڈ"
-    else:
-        return sizeFormat((data[user_index]['down']*0.05)+data[user_index]['down'])
-
-def check_used(user_index, data):
-    total = data[user_index]['total'] * 0.05
-    rem = data[user_index]['total'] - (data[user_index]['down'] + data[user_index]['up'])
-    total2 = data[user_index]['total']
-    if rem < total:
-        return sizeFormat(total2+(total*0.02))
-    elif checksize(user_index, data) :
-        total2 = total2 / 100
-        return sizeFormat(total2+(total2*0.02))
-    else:
-        return sizeFormat(((data[user_index]['down'] + data[user_index]['up'])*0.05)+data[user_index]['down'] + data[user_index]['up'])
+def is_file_empty(file_path):
+    return file_exists(file_path) and os.stat(file_path).st_size == 0
 
 
-def status(user_index, data):
-    total = data[user_index]['total'] * 0.05
-    rem = data[user_index]['total'] - (data[user_index]['down'] + data[user_index]['up'])
-    if rem < total or checksize(user_index, data):
-        return "â›”ï¸ڈط؛غŒط±ظپط¹ط§ظ„"
-    elif data[user_index]['enable']:
-        return "âœ… ظپط¹ط§ظ„"
-    else:
-        return "â›”ï¸ڈط؛غŒط±ظپط¹ط§ظ„"
-
-# checking the total amount of traffic
-def check_total(user_index, data):
-    total = data[user_index]['total']
-    if total == 0:
-        return 'â™¾'
-    elif checksize(user_index, data):
-        total = total/100
-        return sizeFormat(total)
-    else :  
-        return sizeFormat(total)
-
-def traffic_remaining(user_index, data):
-    total = data[user_index]['total'] * 0.05
-    rem = data[user_index]['total'] - (data[user_index]['down'] + data[user_index]['up'])
-
-    if rem < total or checksize(user_index, data):
-        return "â›”ï¸ڈ 0.0 GB"
-    elif data[user_index]['total'] != 0:
-        trr = ((data[user_index]['total']) - (((data[user_index]['down'] + data[user_index]['up'])*0.05)+(data[user_index]['down'] + data[user_index]['up'])))
-        return sizeFormat(trr)
-    else:
-        return 'â™¾'
-
-
-def extract_time(time_rem):
-    try:
-        if 'day' not in time_rem:
-            result = list(re.findall(
-                r"(\d{1,2}):(\d{1,2}):", time_rem)[0])
-        else:
-            result = list(re.findall(
-                r"^(?!-)(\d*) day.?, (\d{1,2}):(\d{1,2}):", time_rem)[0])
-    except IndexError:
-        return 'ط§طھظ…ط§ظ… ط³ط±ظˆغŒط³'
-
-    if len(result) == 3:
-        day, hour, minute = result
-    else:
-        hour, minute = result
-        day = ''
-    if day != '':
-        day = day + ' ط±ظˆط² ظˆ '
-
-    if hour != '0':
-        hour = hour + ' ط³ط§ط¹طھ ظˆ '
-    elif hour == '0':
-        hour = ''
-
-    minute = minute + ' ط¯ظ‚غŒظ‚ظ‡'
-    rem_time = day + hour + minute
-    return rem_time
-
-# checking the expiry Time
-def check_expiryTime(user_index, data):
-    time_stamp = data[user_index]['expiryTime']
-    if time_stamp == 0:
-        return ['â™¾', 'ط²ظ…ط§ظ† â™¾']
-
-    s = time_stamp / 1000.0
-
-    timestamp_to_strtime = datetime.fromtimestamp(
-        s).strftime('%Y-%m-%d %H:%M:%S')
-
-    date = datetime.strptime(timestamp_to_strtime, "%Y-%m-%d %H:%M:%S")
-    date_time_rem = str(date - datetime.now())
-
-    time_rem = extract_time(date_time_rem)
-
-    jdate = JalaliDateTime.to_jalali(
-        datetime(date.year, date.month, date.day, date.hour, date.minute, date.second)).strftime("%Y-%m-%d %H:%M:%S")
-
-    return [time_rem, jdate]
-
-
-def parseVmess(vmesslink):
-    vmscheme = 'vmess://'
-    if vmesslink.startswith(vmscheme):
-        bs = vmesslink[8:]
-        blen = len(bs)
-        if blen % 4 > 0:
-            bs += "=" * (4 - blen % 4)
-
-        vms = base64.b64decode(bs).decode()
-        return vms
-
-# get account info based on uuid
-def account_info(id):
-    data = read_json()
-    try:
-        settings_data = str([data[i]['settings']for i in range(len(data))])
-
-        if re.match(r"^vmess://.*", id):
-            id = re.findall(r".{8}-.{4}-.{4}-.{4}-.{12}", parseVmess(id))[0]
-            user_index = re.findall(
-                r".{8}-.{4}-.{4}-.{4}-.{12}", settings_data).index(id)
-
-        elif re.match(r"^vless://.*@.*", id):
-            id = re.findall(r"^vless://(.{8}-.{4}-.{4}-.{4}-.{12})@", id)[0]
-            user_index = re.findall(
-                r".{8}-.{4}-.{4}-.{4}-.{12}", settings_data).index(id)
-            
-        elif re.match(".{8}-.{4}-.{4}-.{4}-.{12}", id):
-            user_index = re.findall(
-                ".{8}-.{4}-.{4}-.{4}-.{12}", settings_data).index(id)
-
-        # elif re.match(r"^[1-9][0-9]{2,5}", id):
-        #     settings_data = str([data[i] for i in range(len(data))])
-        #     user_index = re.findall(
-        #         r"port.: ([0-9]*),", settings_data).index(id)
-
-        else:
-            user_index = re.findall(
-                "'email': '(.{1,50})', ", settings_data).index(id)
-                    
-        found = True
-
-    except ValueError:
-        return 'not found'
+def get_data_from_panels():
+    panels_data = {}
+    cookies = {}
     
-    if found:
-        return [status(user_index, data), get_account_name(user_index, data), check_up(user_index, data), check_down(user_index, data), check_used(user_index, data), check_total(user_index, data), traffic_remaining(user_index, data), check_expiryTime(user_index, data)]
+    if not file_exists(pickle_file):
+        open(pickle_file, 'w').close()
+
+    elif not is_file_empty(pickle_file):
+        try:
+            with open(pickle_file, 'rb') as f:
+                cookies = pickle.load(f)
+        except:
+            open(pickle_file, 'w').close()
+
+    for panel in panels:
+        if panel['url'][-1] != '/':
+            panel['url']+='/'
+
+        try:
+            panel_name = re.findall(r"http.?://(.*):", panel['url'])[0]
+        except IndexError:
+            print(f"{panel['url']} : The URL structure is incorrect")
+            break
+            
+        payload = {
+            "username": panel['username'],
+            "password": panel['password']
+        }
+        
+        
+        session = requests.Session()
+        if panel_name in cookies:
+            session.cookies.update(cookies[panel_name])
+            try:
+                panel_data = session.post(panel['url'] + url_lists)
+                if panel_data.status_code != 404:
+                    panels_data[panel_name] = panel_data.json()['obj']
+                else: 
+                    panels_data[panel_name] = session.post(panel['url'] + url_sanaei).json()['obj']
+            except requests.exceptions.JSONDecodeError:
+                get_data_from_panels()
+        else:
+            try:
+                response = session.post(panel['url'] + url_login, data=payload)
+                if response.status_code == 404:
+                    print(f"{panel_name} : Are you sure your panel doesn't have a path address?")
+                    continue
+
+                elif not response.json()['success']:
+                    print(f"{panel_name} : wrong Username or Password")
+                    continue
+                
+            except (requests.exceptions.InvalidURL, requests.exceptions.InvalidSchema, requests.exceptions.ConnectionError):
+                print(f"{panel['url']} : incorrect URL or port number")
+                continue
+
+            cookies[panel_name] = response.cookies.get_dict()
+
+            panel_data = session.post(panel['url'] + url_lists)
+            if panel_data.status_code != 404:
+                panels_data[panel_name] = panel_data.json()['obj']
+            else: 
+                panels_data[panel_name] = session.post(panel['url'] + url_sanaei).json()['obj']
+    write_pickle(cookies)
+    return panels_data
+
+# save data
+def save_accounts_to_json():
+    lists = []
+    new_list = []
+    panels_data = get_data_from_panels()
+
+    for panel_name, data_list in panels_data.items():
+
+        if not data_list:
+            print(panel_name,': is empty')
+            continue
+
+        if 'clientStats' in data_list[0]:
+            """ English panel """
+
+            for i in range(len(data_list)):
+                prev = ''
+                try:
+                    client_emails = [data_list[i]['clientStats'][j]['email'] for j in range(len(data_list[i]['clientStats']))]
+                    setting_emails = [json.loads(data_list[i]['settings'])['clients'][j]['email'] for j in range(len(json.loads(data_list[i]['settings'])['clients']))]
+                    
+                    try:
+                        k = 0
+                        for j in range(len(client_emails)):
+                            if client_emails[j] not in setting_emails:
+                                del data_list[i]['clientStats'][j-k]
+                                k += 1
+                    except Exception as e:
+                        print(e)
+
+                    inbound = data_list[i]['clientStats']
+                    setting = json.loads(data_list[i]['settings'])[
+                        'clients']
+                    sorted_inbound = sorted(inbound, key=lambda x: [
+                        d['email'] for d in setting].index(x['email']))
+                    data_list[i]['clientStats'] = sorted_inbound
+
+                    for j in range(len(data_list[i]['clientStats'])):
+
+                        if prev == json.loads(data_list[i]['settings'])['clients'][j]['id']:
+                            break
+                        prev = json.loads(data_list[i]['settings'])[
+                            'clients'][j]['id']
+                        
+                        data_list[i]['clientStats'][j]['settings'] = str(
+                            json.loads(data_list[i]['settings'])['clients'][j])
+                        new_list.append(data_list[i]['clientStats'][j])
+
+                except Exception as e:
+                    print(e)
+
+            data_list = new_list
+
+        elif 'clientInfo' in data_list[0]:
+            """ kafka panel """
+
+            for i in range(len(data_list)):
+                prev = ''
+                try:
+                    client_emails = [data_list[i]['clientInfo'][j]['email']
+                                        for j in range(len(data_list[i]['clientInfo']))]
+                    setting_emails = [json.loads(data_list[i]['settings'])['clients'][j]['email'] for j in range(
+                        len(json.loads(data_list[i]['settings'])['clients']))]
+
+                    try:
+                        k = 0
+                        for j in range(len(client_emails)):
+                            if client_emails[j] not in setting_emails:
+                                del data_list[i]['clientInfo'][j-k]
+                                k += 1
+                    except Exception as e:
+                        print(e)
+
+                    inbound = data_list[i]['clientInfo']
+                    setting = json.loads(data_list[i]['settings'])[
+                        'clients']
+                    sorted_inbound = sorted(inbound, key=lambda x: [
+                        d['email'] for d in setting].index(x['email']))
+                    data_list[i]['clientInfo'] = sorted_inbound
+
+                    for j in range(len(data_list[i]['clientInfo'])):
+
+                        if prev == json.loads(data_list[i]['settings'])['clients'][j]['id']:
+                            break
+                        prev = json.loads(data_list[i]['settings'])[
+                            'clients'][j]['id']
+
+                        data_list[i]['clientInfo'][j]['settings'] = str(
+                            json.loads(data_list[i]['settings'])['clients'][j])
+                        new_list.append(data_list[i]['clientInfo'][j])
+
+                except Exception as e:
+                    print(e)
+
+            data_list = new_list
+        
+        else:
+            for i in range(len(data_list)):
+                data_list[i]['email'] = data_list[i].pop('remark')
+                data_list[i].pop('streamSettings')
+                data_list[i].pop('sniffing')
+                data_list[i].pop('tag')
+
+        lists.extend(data_list)
+        print(f"{panel_name} : geting data successful")
+    
+    open(json_file, 'w').close()
+    write_json(lists)
+
+
+if __name__ == '__main__':
+    save_accounts_to_json()
